@@ -11,13 +11,13 @@ Utility = {
   cleanNulls: function cleanNulls(doc, isArray) {
     var newDoc = isArray ? [] : {};
     _.each(doc, function(val, key) {
-      if (!_.isArray(val) && !(val instanceof Date) && _.isObject(val)) {
-        val = cleanNulls(val, false); //recurse into objects
+      if (!_.isArray(val) && isBasicObject(val)) {
+        val = cleanNulls(val, false); //recurse into plain objects
         if (!_.isEmpty(val)) {
           newDoc[key] = val;
         }
       } else if (_.isArray(val)) {
-        val = cleanNulls(val, true); //recurse into arrays
+        val = cleanNulls(val, true); //recurse into non-typed arrays
         if (!_.isEmpty(val)) {
           newDoc[key] = val;
         }
@@ -129,11 +129,14 @@ Utility = {
    * name on the `window` object. Otherwise returns `obj`.
    */
   lookup: function lookup(obj) {
+    var ref = window, arr;
     if (typeof obj === "string") {
-      if (!window || !window[obj]) {
+      arr = obj.split(".");
+      while(arr.length && (ref = ref[arr.shift()]));
+      if (!ref) {
         throw new Error(obj + " is not in the window scope");
       }
-      return window[obj];
+      return ref;
     }
     return obj;
   },
@@ -485,4 +488,29 @@ Utility = {
       return s;
     }
   }
+};
+
+
+// getPrototypeOf polyfill
+if (typeof Object.getPrototypeOf !== "function") {
+  if (typeof "".__proto__ === "object") {
+    Object.getPrototypeOf = function(object) {
+      return object.__proto__;
+    };
+  } else {
+    Object.getPrototypeOf = function(object) {
+      // May break if the constructor has been tampered with
+      return object.constructor.prototype;
+    };
+  }
+}
+
+/* Tests whether "obj" is an Object as opposed to
+ * something that inherits from Object
+ *
+ * @param {any} obj
+ * @returns {Boolean}
+ */
+var isBasicObject = function(obj) {
+  return _.isObject(obj) && Object.getPrototypeOf(obj) === Object.prototype;
 };

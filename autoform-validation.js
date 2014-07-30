@@ -1,63 +1,25 @@
-_validateForm = function _validateForm(formId, template) {
-  // First gether necessary form details
-  var data = formData[formId];
-  var isInsert = (data.submitType === "insert");
-  var isUpdate = (data.submitType === "update");
-  var isRemove = (data.submitType === "remove");
-  var method = data.submitMethod;
-  var isNormalSubmit = (!isInsert && !isUpdate && !isRemove && !method);
-  var validationType = data.validationType;
-  var skipValidate = (validationType === 'none');
-  // ss will be the schema for the `schema` attribute if present,
-  // else the schema for the collection
-  var ss = data.ss;
-  var currentDoc = data.doc;
-  var docId = currentDoc ? currentDoc._id : null;
+_validateForm = function _validateForm(formId, formDetails, formDocs, useCollectionSchema) {
+  if (formDetails.validationType === 'none')
+    return true;
 
-  // Gather all form values
-  var form = getFormValues(template, formId, ss);
-
+  // We use the schema for the `schema` attribute if present,
+  // else the schema for the collection. If there is a `schema`
+  // attribute but you want to force validation against the
+  // collection's schema instead, pass useCollectionSchema=true
+  var ss = (useCollectionSchema && formDetails.collection) ? formDetails.collection.simpleSchema() : formDetails.ss;
+  
   // Perform validation
-  var result = {};
-  if (method) {
-    // For a form that calls a method, we validate the doc after running it through
-    // all before hooks for the method.
-    var beforeMethod = Hooks.getHooks(formId, 'before', method);
-    var methodDoc = doBefore(null, form.insertDoc, beforeMethod, template, 'before.method hook');
-    result.methodDoc = methodDoc;
-    result.methodDocIsValid = skipValidate || validateFormDoc(methodDoc, false, formId, ss);
+  if (formDetails.submitType === "update") {
+    // For a type="update" form, we validate the modifier. We don't want to throw
+    // errors about missing required fields, etc.
+    return validateFormDoc(formDocs.updateDoc, true, formId, ss);
+  } else {
+    // For any other type of form, we validate the document.
+    return validateFormDoc(formDocs.insertDoc, false, formId, ss);
   }
-
-  if (isUpdate) {
-    // For an update form, we validate the modifier after running it through
-    // all before update hooks.
-    var beforeUpdate = Hooks.getHooks(formId, 'before', 'update');
-    var updateDoc = doBefore(docId, form.updateDoc, beforeUpdate, template, 'before.update hook');
-    result.updateDoc = updateDoc;
-    result.updateDocIsValid = skipValidate || validateFormDoc(updateDoc, true, formId, ss);
-  } else if (isInsert) {
-    // For an insert form, we validate the doc after running it through
-    // all before insert hooks.
-    var beforeInsert = Hooks.getHooks(formId, 'before', 'insert');
-    var insertDoc = doBefore(null, form.insertDoc, beforeInsert, template, 'before.insert hook');
-    result.insertDoc = insertDoc;
-    result.insertDocIsValid = skipValidate || validateFormDoc(insertDoc, false, formId, ss);
-  }
-
-  var onSubmit = Hooks.getHooks(formId, 'onSubmit');
-  if (onSubmit.length > 0 || isNormalSubmit) {
-    // onSubmit hooks receive both insert doc and update modifier, but
-    // we only need to validate the insert doc; neither go through any
-    // before hooks.
-    result.submitDoc = form.insertDoc;
-    result.submitDocIsValid = skipValidate || validateFormDoc(form.insertDoc, false, formId, ss);
-    result.submitUpdateDoc = form.updateDoc;
-  }
-
-  return result;
 };
 
-validateFormDoc = function validateFormDoc(doc, isModifier, formId, ss) {
+validateFormDoc = function validateFormDoc(doc, isModifier, formId, ss, key) {
   var ec = {
     userId: (Meteor.userId && Meteor.userId()) || null,
     isInsert: !isModifier,
@@ -77,10 +39,18 @@ validateFormDoc = function validateFormDoc(doc, isModifier, formId, ss) {
   });
 
   // Validate
-  return ss.namedContext(formId).validate(docForValidation, {
-    modifier: isModifier,
-    extendedCustomContext: ec
-  });
+  // If `key` is provided, we validate that key/field only
+  if (key) {
+    return ss.namedContext(formId).validateOne(docForValidation, key, {
+      modifier: isModifier,
+      extendedCustomContext: ec
+    });
+  } else {
+    return ss.namedContext(formId).validate(docForValidation, {
+      modifier: isModifier,
+      extendedCustomContext: ec
+    });
+  }
 };
 
 _validateField = function _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid) {
@@ -90,69 +60,60 @@ _validateField = function _validateField(key, template, skipEmpty, onlyIfAlready
 
   var context = template.data;
   var formId = context.id || defaultFormId;
-  var ss = Utility.getSimpleSchemaFromContext(context, formId);
+  var formDetails = formData[formId];
+  var ss = formDetails.ss;
 
   if (onlyIfAlreadyInvalid && ss.namedContext(formId).isValid()) {
     return; //skip validation
   }
 
   // Create a document based on all the values of all the inputs on the form
-  var form = getFormValues(template, formId, ss);
+  var formDocs = getFormValues(template, formId, ss);
 
   // Clean and validate doc
-  if (context.type === "update") {
-    var docToValidate = form.updateDoc;
+  if (formDetails.submitType === "update") {
+    var docToValidate = formDocs.updateDoc;
     var isModifier = true;
   } else {
-    var docToValidate = form.insertDoc;
+    var docToValidate = formDocs.insertDoc;
     var isModifier = false;
   }
 
   // Skip validation if skipEmpty is true and the field we're validating
   // has no value.
   if (skipEmpty && !Utility.objAffectsKey(docToValidate, key))
-    return; //skip validation
+    return true; //skip validation
 
-  var userId = (Meteor.userId && Meteor.userId()) || null;
-
-  // getFormValues did some cleaning but didn't add auto values; add them now
-  ss.clean(docToValidate, {
-    isModifier: isModifier,
-    filter: false,
-    autoConvert: false,
-    extendAutoValueContext: {
-      userId: userId,
-      isInsert: !isModifier,
-      isUpdate: isModifier,
-      isUpsert: false,
-      isFromTrustedCode: false
-    }
-  });
-  return ss.namedContext(formId).validateOne(docToValidate, key, {
-    modifier: isModifier,
-    extendedCustomContext: {
-      userId: userId,
-      isInsert: !isModifier,
-      isUpdate: isModifier,
-      isUpsert: false,
-      isFromTrustedCode: false
-    }
-  });
+  return validateFormDoc(docToValidate, isModifier, formId, ss, key);
 };
 
 //throttling function that calls out to _validateField
-var vok = {}, tm = {};
+var vok = {}, tm = {}, _prevent = false;
 validateField = function validateField(key, template, skipEmpty, onlyIfAlreadyInvalid) {
   if (vok[key] === false) {
     Meteor.clearTimeout(tm[key]);
     tm[key] = Meteor.setTimeout(function() {
       vok[key] = true;
-      _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid);
+      if (!_prevent) {
+        _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid);
+      }
     }, 300);
     return;
   }
   vok[key] = false;
-  _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid);
+  if (!_prevent) {
+    _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid);
+  }
+};
+
+// To prevent issues with keyup validation firing right after we've
+// invalidated due to submission, we can quickly and temporarily stop
+// field validation.
+preventQueuedValidation = function preventQueuedValidation() {
+  _prevent = true;
+  Meteor.setTimeout(function() {
+    _prevent = false;
+  }, 500);
 };
 
 // Prep function to select the focus the first field with an error
@@ -168,21 +129,3 @@ selectFirstInvalidField = function selectFirstInvalidField(formId, ss, template)
   	});
   }
 };
-
-function doBefore(docId, doc, hooks, template, name) {
-  // We pass the template instance in case the hook
-  // needs the data context
-  _.each(hooks, function doBeforeHook(hook) {
-    if (hook) {
-      if (docId) {
-        doc = hook(docId, doc, template);
-      } else {
-        doc = hook(doc, template);
-      }
-      if (!_.isObject(doc)) {
-        throw new Error(name + " must return an object");
-      }
-    }
-  });
-  return doc;
-}

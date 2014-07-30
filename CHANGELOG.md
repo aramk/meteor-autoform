@@ -6,6 +6,50 @@ forms with automatic insert and update events, and automatic reactive validation
 
 ## Change Log
 
+### 0.16.1
+
+An insert form will now insert properly even if the `collection` does not have an attached schema.
+
+### 0.16.0
+
+* Fix error when you add `autoform` to your app but not `simple-schema`.
+* You can now use object dot notation when setting collection or schema for a form as a string, for example, `collection="App.Collections.Posts"` or `schema="Schemas.Post"`. (Thanks @czeslaaw)
+* You can now easily tell an update form to save (submit) whenever the value in one of its fields changes. Put `autosave=true` on the `autoForm` or `quickForm`.
+
+### 0.15.4
+
+* Fixes to submission validation logic for forms that have both `collection` and `schema`
+* More useful `Error` instance is passed to `onError` hooks
+
+### 0.15.3
+
+Fix to code that gathers form values so that custom object prototypes are not lost.
+
+### 0.15.2
+
+When submitting, ensure that validation is always skipped when `validation="none"` for the form.
+
+### 0.15.1
+
+Fix submission logic so that validation happens before insert and update "before" hooks only when there's an override schema.
+
+### 0.15.0
+
+**BREAKING CHANGES TO FORM SUBMISSION AND HOOKS:**
+
+* You can no longer call a `meteormethod` in addition to performing other types of submission. Your `meteormethod` will be called only if `type="method"`.
+* `onSubmit` hooks can now perform async tasks if necessary. You must add a `this.done()` call to all of your `onSubmit` hooks. Refer to the hooks documentation in the readme.
+* `onSubmit` hooks are now called *only if* your form has no `type` attribute. If you have an `onSubmit` hook for a form, remove the `type` attribute from that form and be sure that your `onSubmit` hook returns `false`. If you were using `onSubmit` to cancel submission for an insert, update, or method form, you can do that by returning `false` from a "before" hook instead.
+
+Other non-breaking changes:
+
+* "before" hooks for insert, update, and method forms can now perform async tasks if necessary. Existing synchronous hooks do not need any changes. Refer to the hooks documentation in the readme.
+* Improved logic for form resetting, and `AutoForm.resetForm` method works better.
+
+### 0.14.1
+
+Fixed an issue where `afFieldValueIs` and `afFieldValueContains` helpers did not correctly recognize boolean values upon first form render.
+
 ### 0.14.0
 
 * Added `afArrayFieldIsFirstVisible` and `afArrayFieldIsLastVisible` helpers. (Thanks @camelaissani!)
