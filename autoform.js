@@ -106,7 +106,8 @@ Template.autoForm.atts = function autoFormTplAtts() {
   // After removing all of the props we know about, everything else should
   // become a form attribute.
   // XXX Would be better to use a whitelist of HTML attributes allowed on form elements
-  return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess", "type", "template");
+  // XXX "settings" is a custom object which can contain additional meta-data for use in hooks, passed down from the parent template.
+  return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess", "type", "template", "settings");
 };
 
 Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) {
