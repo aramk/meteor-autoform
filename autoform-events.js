@@ -82,6 +82,10 @@ Template.autoForm.events({
       endSubmit(formId, template);
     }
 
+    // Submission should never propagate in case this is a sub-form. Otherwise the event will bubble
+    // up and cause submission of the outer form as well, which should never be assumed.
+    event.stopPropagation();
+
     function failedValidation() {
       selectFirstInvalidField(formId, ss, template);
       var ec = ss.namedContext(formId);
