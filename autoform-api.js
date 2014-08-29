@@ -245,3 +245,36 @@ AutoForm.getValidationContext = function autoFormGetValidationContext(formId) {
   var ss = data.ss;
   return ss.namedContext(formId);
 };
+
+/**
+ * @method AutoForm.find
+ * @public
+ * @return {Object} The data context for the closest autoform.
+ *
+ * Call this method from a UI helper to get the data context for the closest autoform.
+ */
+AutoForm.find = function autoFormFind(type) {
+  var n = 0, af;
+  do {
+    af = UI._parentData(n++);
+  } while (af && !af._af);
+  if (!af) {
+    throw new Error((type || "AutoForm.find") + " must be used within an autoForm block");
+  }
+  return af._af;
+};
+
+/**
+ * @method AutoForm.debug
+ * @public
+ *
+ * Call this method in client code while developing to turn on extra logging.
+ */
+AutoForm.debug = function autoFormDebug() {
+  SimpleSchema.debug = true;
+  AutoForm.addHooks(null, {
+    onError: function (operation, error, template) {
+      console.log("Error in " + this.formId, operation, error);
+    }
+  });
+};

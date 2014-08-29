@@ -8,20 +8,22 @@ Utility = {
    * Returns an object in which all properties with null, undefined, or empty
    * string values have been removed, recursively.
    */
-  cleanNulls: function cleanNulls(doc, isArray) {
+  cleanNulls: function cleanNulls(doc, isArray, keepEmptyStrings) {
     var newDoc = isArray ? [] : {};
     _.each(doc, function(val, key) {
       if (!_.isArray(val) && isBasicObject(val)) {
-        val = cleanNulls(val, false); //recurse into plain objects
+        val = cleanNulls(val, false, keepEmptyStrings); //recurse into plain objects
         if (!_.isEmpty(val)) {
           newDoc[key] = val;
         }
       } else if (_.isArray(val)) {
-        val = cleanNulls(val, true); //recurse into non-typed arrays
+        val = cleanNulls(val, true, keepEmptyStrings); //recurse into non-typed arrays
         if (!_.isEmpty(val)) {
           newDoc[key] = val;
         }
       } else if (!Utility.isNullUndefinedOrEmptyString(val)) {
+        newDoc[key] = val;
+      } else if (keepEmptyStrings && typeof val === "string" && val.length === 0) {
         newDoc[key] = val;
       }
     });
@@ -35,16 +37,20 @@ Utility = {
    * original object that were null, undefined, or empty strings, and the value
    * of each key is "".
    */
-  reportNulls: function reportNulls(flatDoc) {
+  reportNulls: function reportNulls(flatDoc, keepEmptyStrings) {
     var nulls = {};
     // Loop through the flat doc
     _.each(flatDoc, function(val, key) {
       // If value is undefined, null, or an empty string, report this as null so it will be unset
-      if (Utility.isNullUndefinedOrEmptyString(val)) {
+      if (val === null) {
+        nulls[key] = "";
+      } else if (val === void 0) {
+        nulls[key] = "";
+      } else if (!keepEmptyStrings && typeof val === "string" && val.length === 0) {
         nulls[key] = "";
       }
       // If value is an array in which all the values recursively are undefined, null, or an empty string, report this as null so it will be unset
-      else if (_.isArray(val) && Utility.cleanNulls(val, true).length === 0) {
+      else if (_.isArray(val) && Utility.cleanNulls(val, true, keepEmptyStrings).length === 0) {
         nulls[key] = "";
       }
     });
@@ -60,7 +66,7 @@ Utility = {
    * null, undefined, and empty string values into `modifier.$unset`, and
    * putting the rest of the keys into `modifier.$set`.
    */
-  docToModifier: function docToModifier(doc) {
+  docToModifier: function docToModifier(doc, keepEmptyStrings) {
     var modifier = {};
 
     // Flatten doc
@@ -68,8 +74,8 @@ Utility = {
     var flatDoc = mDoc.getFlatObject({keepArrays: true});
     mDoc = null;
     // Get a list of null, undefined, and empty string values so we can unset them instead
-    var nulls = Utility.reportNulls(flatDoc);
-    flatDoc = Utility.cleanNulls(flatDoc);
+    var nulls = Utility.reportNulls(flatDoc, keepEmptyStrings);
+    flatDoc = Utility.cleanNulls(flatDoc, false, keepEmptyStrings);
 
     if (!_.isEmpty(flatDoc)) {
       modifier.$set = flatDoc;
@@ -234,6 +240,35 @@ Utility = {
     }
   },
   /**
+   * @method Utility.bubbleEmpty
+   * @private
+   * @param  {Object} obj
+   * @return {undefined}
+   *
+   * Edits the object by reference.
+   */
+  bubbleEmpty: function bubbleEmpty(obj, keepEmptyStrings) {
+    if (_.isObject(obj)) {
+      _.each(obj, function (val, key) {
+        if (_.isArray(val)) {
+          _.each(val, function (arrayItem) {
+            bubbleEmpty(arrayItem);
+          });
+        } else if (_.isObject(val) && !(val instanceof Date)) {
+          var allEmpty = _.all(val, function (prop) {
+            return (prop === void 0 || prop === null || (!keepEmptyStrings && typeof prop === "string" && prop.length === 0));
+          });
+          if (_.isEmpty(val) || allEmpty) {
+            obj[key] = null;
+          } else {
+            //recurse into objects
+            bubbleEmpty(val);
+          }
+        }
+      });
+    }
+  },
+  /**
    * @method Utility.getSimpleSchemaFromContext
    * @private
    * @param  {Object} context
@@ -392,7 +427,7 @@ Utility = {
   dateToNormalizedLocalDateAndTimeString: function dateToNormalizedLocalDateAndTimeString(date, offset) {
     var m = moment(date);
     m.zone(offset);
-    return m.format("YYYY-MM-DD[T]hh:mm:ss.SSS");
+    return m.format("YYYY-MM-DD[T]HH:mm:ss.SSS");
   },
   /**
    * @method  Utility.isValidNormalizedLocalDateAndTimeString
@@ -426,16 +461,12 @@ Utility = {
   normalizeContext: function autoFormNormalizeContext(context, name) {
     context = context || {};
     var atts = context.atts || context;
-    var afContext = atts.autoform || context.autoform;
-    if (!afContext || !afContext._af) {
-      throw new Error(name + " must be used within an autoForm block");
-    }
-
-    var defs = Utility.getDefs(afContext._af.ss, atts.name); //defs will not be undefined
+    var autoform = AutoForm.find(name);
+    var defs = Utility.getDefs(autoform.ss, atts.name); //defs will not be undefined
 
     // For array fields, `allowedValues` is on the array item definition
     if (defs.type === Array) {
-      var itemDefs = Utility.getDefs(afContext._af.ss, atts.name + ".$");
+      var itemDefs = Utility.getDefs(autoform.ss, atts.name + ".$");
       var allowedValues = itemDefs.allowedValues;
     } else {
       var allowedValues = defs.allowedValues;
@@ -467,8 +498,7 @@ Utility = {
     }
 
     return {
-      afc: afContext,
-      af: afContext._af,
+      af: autoform,
       atts: atts,
       defs: defs
     };

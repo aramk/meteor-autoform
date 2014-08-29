@@ -31,16 +31,12 @@ Template['afDeleteButton_bootstrap3'].atts = function bsDeleteButtonAtts() {
 Template['quickForm_bootstrap3'].submitButtonAtts = function bsQuickFormSubmitButtonAtts() {
   var qfAtts = this.atts;
   var atts = {type: "submit"};
-  atts['class'] = 'btn btn-primary';
   if (typeof qfAtts.buttonClasses === "string") {
-    atts['class'] += ' ' + qfAtts.buttonClasses;
+    atts['class'] = qfAtts.buttonClasses;
+  } else {
+    atts['class'] = 'btn btn-primary';
   }
   return atts;
-};
-
-Template['quickForm_bootstrap3'].qfNeedsButton = function bsQuickFormNeedsButton() {
-  var submitType = this._af.submitType;
-  return (submitType !== "readonly" && submitType !== "disabled");
 };
 
 function addFormControlAtts() {

@@ -52,45 +52,45 @@ deps = {
  * Shared
  */
 
-Template.afFieldInput.getTemplate =
-Template.afFieldLabel.getTemplate =
-Template.afFieldSelect.getTemplate =
-Template.afDeleteButton.getTemplate =
-Template.afQuickField.getTemplate =
-Template.afObjectField.getTemplate =
-Template.afArrayField.getTemplate =
-Template.quickForm.getTemplate =
-function afGenericGetTemplate(templateType, templateName, fieldName, autoform) {
-  var result;
-
+UI.registerHelper('afTemplateName', function afTemplateNameHelper(templateType, templateName) {
+  var self = this;
+  
   // Template may be specified in schema.
   // Skip for quickForm and afDeleteButton because they render a form
   // and not a field.
-  if (fieldName && autoform) {
-    var defs = Utility.getDefs(autoform._af.ss, fieldName); //defs will not be undefined
-    templateName = templateName || (defs.autoform && defs.autoform.template);
+  if (!templateName && templateType !== 'quickForm' && templateType !== 'afDeleteButton') {
+    var autoform = AutoForm.find(templateType);
+    var fieldName = self.name;
+    
+    if (fieldName && autoform) {
+      var defs = Utility.getDefs(autoform.ss, fieldName); //defs will not be undefined
+      templateName = (defs.autoform && defs.autoform.template);
+    }
   }
-  
+
+  // Determine default template
   var defaultTemplate = AutoForm.getDefaultTemplateForType(templateType) || AutoForm.getDefaultTemplate();
 
   // Determine template name
+  var result;
   if (templateName) {
-    var result = Template[templateType + '_' + templateName];
-    if (!result) {
+    result = templateType + '_' + templateName;
+    if (!Template[result]) {
+      // TODO should warn only in debug mode
       console.warn(templateType + ': "' + templateName + '" is not a valid template name. Falling back to default template, "' + defaultTemplate + '".');
     }
   }
 
   if (!result) {
-    result = Template[templateType + '_' + defaultTemplate];
-    if (!result) {
+    result = templateType + '_' + defaultTemplate;
+    if (!Template[result]) {
       throw new Error(templateType + ': "' + defaultTemplate + '" is not a valid template name');
     }
   }
 
-  // Return the template instance that we want to use
+  // Return the template name that we want to use
   return result;
-};
+});
 
 /*
  * autoForm
@@ -108,7 +108,8 @@ Template.autoForm.atts = function autoFormTplAtts() {
   // become a form attribute.
   // XXX Would be better to use a whitelist of HTML attributes allowed on form elements
   // XXX "settings" is a custom object which can contain additional meta-data for use in hooks, passed down from the parent template.
-  return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess", "type", "template", "settings");
+  return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess",
+      "type", "template", "autosave", "meteormethod", "filter", "autoConvert", "removeEmptyStrings", "settings");
 };
 
 Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) {
@@ -127,9 +128,10 @@ Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) 
   if (context.doc && !_.isEmpty(context.doc)) {
     // Clone doc
     var copy = _.clone(context.doc);
+    var hookCtx = {formId: formId};
     // Pass doc through docToForm hooks
-    _.each(Hooks.getHooks(formId, 'docToForm'), function autoFormEachDocToForm(func) {
-      copy = func(copy, ss, formId);
+    _.each(Hooks.getHooks(formId, 'docToForm'), function autoFormEachDocToForm(hook) {
+      copy = hook.call(hookCtx, copy, ss, formId);
     });
     // Create a "flat doc" that can be used to easily get values for corresponding
     // form fields.
@@ -162,7 +164,10 @@ Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) 
     submitType: context.type,
     submitMethod: context.meteormethod,
     resetOnSuccess: resetOnSuccess,
-    autosave: autosave
+    autosave: autosave,
+    filter: context.filter,
+    autoConvert: context.autoConvert,
+    removeEmptyStrings: context.removeEmptyStrings
   }};
 
   // Cache context for lookup by formId
@@ -215,10 +220,6 @@ Template.autoForm.destroyed = function autoFormDestroyed() {
  * quickForm
  */
 
-UI.registerHelper('quickForm', function quickFormHelper() {
-  throw new Error('Use the new syntax {{> quickForm}} rather than {{quickForm}}');
-});
-
 Template.quickForm.innerContext = function quickFormContext(atts) {
   // Pass along quickForm context to autoForm context, minus a few
   // properties that are specific to quickForms.
@@ -226,25 +227,20 @@ Template.quickForm.innerContext = function quickFormContext(atts) {
 
   return {
     qfAutoFormContext: qfAutoFormContext,
-    atts: atts
+    atts: atts,
+    // qfShouldRenderButton helper
+    qfShouldRenderButton: function qfShouldRenderButton() {
+      var self = this;
+      var qfAtts = self.atts;
+      var submitType = self._af.submitType;
+      return (qfAtts.buttonContent !== false && submitType !== "readonly" && submitType !== "disabled");
+    }
   };
 };
 
 /*
- * afFieldLabel
- */
-
-UI.registerHelper('afFieldLabel', function afFieldLabelHelper() {
-  throw new Error('Use the new syntax {{> afFieldLabel name="name"}} rather than {{afFieldLabel "name"}}');
-});
-
-/*
  * afFieldInput
  */
-
-UI.registerHelper('afFieldInput', function afFieldInputHelper() {
-  throw new Error('Use the new syntax {{> afFieldInput name="name"}} rather than {{afFieldInput "name"}}');
-});
 
 Template.afFieldInput.getTemplateType = function getTemplateType() {
   return getInputTemplateType(this.type);
@@ -254,6 +250,7 @@ Template.afFieldSelect.innerContext =
 Template.afFieldInput.innerContext = function afFieldInputInnerContext(options) {
   var c = Utility.normalizeContext(options.hash, "afFieldInput and afFieldSelect");
   var contentBlock = options.hash.contentBlock; // applies only to afFieldSelect
+  var contentBlockContext = options.hash.contentBlockContext; // applies only to afFieldSelect
 
   // Set up deps, allowing us to re-render the form
   formDeps[c.af.formId] = formDeps[c.af.formId] || new Deps.Dependency;
@@ -287,24 +284,12 @@ Template.afFieldInput.innerContext = function afFieldInputInnerContext(options) 
   var iData = getInputData(defs, c.atts, value, inputType, ss.label(c.atts.name), expectsArray, c.af.submitType, c.af);
 
   // Return input data context
-  return _.extend({_af: c.af, contentBlock: contentBlock, type: inputType}, iData);
+  return _.extend({_af: c.af, contentBlock: contentBlock, contentBlockContext: contentBlockContext, type: inputType}, iData);
 };
-
-/*
- * afFieldSelect
- */
-
-UI.registerHelper('afFieldSelect', function afFieldSelectHelper() {
-  throw new Error('Use the new syntax {{> afFieldSelect name="name"}} rather than {{afFieldSelect "name"}}');
-});
 
 /*
  * afDeleteButton
  */
-
-UI.registerHelper('afDeleteButton', function afDeleteButtonHelper() {
-  throw new Error('Use the syntax {{> afDeleteButton collection=collection doc=doc}}');
-});
 
 Template.afDeleteButton.innerContext = function afDeleteButtonInnerContext(ctx, contentBlock) {
   return _.extend(ctx, {contentBlock: contentBlock});
@@ -313,10 +298,6 @@ Template.afDeleteButton.innerContext = function afDeleteButtonInnerContext(ctx, 
 /*
  * afArrayField
  */
-
-UI.registerHelper('afArrayField', function afArrayFieldHelper() {
-  throw new Error('Use the syntax {{> afArrayField name="name"}} rather than {{afArrayField "name"}}');
-});
 
 Template.afArrayField.innerContext = function (options) {
   var c = Utility.normalizeContext(options.hash, "afArrayField");
@@ -331,36 +312,22 @@ Template.afArrayField.innerContext = function (options) {
   arrayTracker.initField(formId, name, ss, docCount, fieldMinCount, fieldMaxCount);
 
   return {
-    atts: c.atts,
-    autoform: c.afc
+    atts: c.atts
   };
 };
-
-/*
- * afObjectField
- */
-
-UI.registerHelper('afObjectField', function afObjectFieldHelper() {
-  throw new Error('Use the syntax {{> afObjectField name="name"}} rather than {{afObjectField "name"}}');
-});
 
 /*
  * afQuickField
  */
 
-UI.registerHelper('afQuickField', function afQuickFieldHelper() {
-  throw new Error('Use the new syntax {{> afQuickField name="name"}} rather than {{afQuickField "name"}}');
-});
-
-function quickFieldLabelAtts(context, autoform) {
+function quickFieldLabelAtts(context) {
   // Remove unwanted props from the hash
   context = _.omit(context, 'label');
 
   // Separate label options from input options; label items begin with "label-"
   var labelContext = {
     name: context.name,
-    template: context.template,
-    autoform: autoform
+    template: context.template
   };
   _.each(context, function autoFormLabelContextEach(val, key) {
     if (key.indexOf("label-") === 0) {
@@ -371,12 +338,12 @@ function quickFieldLabelAtts(context, autoform) {
   return labelContext;
 }
 
-function quickFieldInputAtts(context, autoform) {
+function quickFieldInputAtts(context) {
   // Remove unwanted props from the hash
   context = _.omit(context, 'label');
 
   // Separate label options from input options; label items begin with "label-"
-  var inputContext = {autoform: autoform};
+  var inputContext = {};
   _.each(context, function autoFormInputContextEach(val, key) {
     if (key.indexOf("label-") !== 0) {
       inputContext[key] = val;
@@ -390,14 +357,14 @@ Template.afQuickField.innerContext = function afQuickFieldInnerContext(options) 
   var c = Utility.normalizeContext(options.hash, "afQuickField");
   var ss = c.af.ss;
 
-  var labelAtts = quickFieldLabelAtts(c.atts, c.afc);
-  var inputAtts = quickFieldInputAtts(c.atts, c.afc);
+  var labelAtts = quickFieldLabelAtts(c.atts);
+  var inputAtts = quickFieldInputAtts(c.atts);
 
   return {
     skipLabel: (c.atts.label === false || (c.defs.type === Boolean && !("select" in c.atts) && !("radio" in c.atts))),
     afFieldLabelAtts: labelAtts,
     afFieldInputAtts: inputAtts,
-    atts: {name: inputAtts.name, autoform: inputAtts.autoform}
+    atts: {name: inputAtts.name}
   };
 };
 
@@ -414,6 +381,16 @@ Template.afQuickField.isFieldArray = function afQuickFieldIsFieldArray(options) 
   // and we have not overridden the type
   return (c.defs.type === Array && !c.atts.options && !c.atts.type);
 };
+
+/*
+ * afQuickFields
+ */
+
+Template.afQuickFields.helpers({
+  quickFieldAtts: function quickFieldAtts() {
+    return _.extend({options: "auto"}, UI._parentData(2), this);
+  }
+});
 
 /*
  * afEachArrayItem
@@ -479,6 +456,24 @@ getFieldValue = function getFieldValue(template, key) {
 };
 
 getFormValues = function getFormValues(template, formId, ss) {
+  var formInfo = formData[formId];
+  // By default, we do not keep empty strings
+  var keepEmptyStrings = false;
+  if (formInfo.removeEmptyStrings === false) {
+    keepEmptyStrings = true;
+  }
+  // By default, we do filter
+  var filter = true;
+  if (formInfo.filter === false) {
+    filter = false;
+  }
+  // By default, we do autoConvert
+  var autoConvert = true;
+  if (formInfo.autoConvert === false) {
+    autoConvert = false;
+  }
+
+  // Build doc from field values
   var doc = getFieldsValues(template.$("[data-schema-key]").not("[disabled]"));
 
   // Expand the object
@@ -489,10 +484,21 @@ getFormValues = function getFormValues(template, formId, ss) {
   // remove any array items that are undefined.
   Utility.compactArrays(doc);
 
+  // When all fields that comprise a sub-object are empty, we should unset
+  // the whole subobject and not complain about required fields in it. For example,
+  // if `profile.address` has several properties but they are all null or undefined,
+  // we will set `profile.address=null`. This ensures that we don't get incorrect validation
+  // errors about required fields that are children of optional objects.
+  Utility.bubbleEmpty(doc, keepEmptyStrings);
+
   // Pass expanded doc through formToDoc hooks
+  var hookCtx = {
+    template: template,
+    formId: formId
+  };
   var transforms = Hooks.getHooks(formId, 'formToDoc');
   _.each(transforms, function formValuesTransform(transform) {
-    doc = transform(doc, ss, formId);
+    doc = transform.call(hookCtx, doc, ss, formId);
   });
 
   // We return doc, insertDoc, and updateDoc.
@@ -500,13 +506,17 @@ getFormValues = function getFormValues(template, formId, ss) {
   // For updateDoc, convert to modifier object with $set and $unset.
   // Do not add auto values to either.
   var result = {
-    insertDoc: ss.clean(Utility.cleanNulls(doc), {
+    insertDoc: ss.clean(Utility.cleanNulls(doc, false, keepEmptyStrings), {
       isModifier: false,
-      getAutoValues: false
+      getAutoValues: false,
+      filter: filter,
+      autoConvert: autoConvert
     }),
-    updateDoc: ss.clean(Utility.docToModifier(doc), {
+    updateDoc: ss.clean(Utility.docToModifier(doc, keepEmptyStrings), {
       isModifier: true,
-      getAutoValues: false
+      getAutoValues: false,
+      filter: filter,
+      autoConvert: autoConvert
     })
   };
   return result;
