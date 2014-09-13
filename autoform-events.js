@@ -78,6 +78,10 @@ Template.autoForm.events({
       endSubmit(formId, template);
     }
 
+    // Submission should never propagate in case this is a sub-form. Otherwise the event will bubble
+    // up and cause submission of the outer form as well, which should never be assumed.
+    event.stopPropagation();
+
     function failedValidation() {
       selectFirstInvalidField(formId, ss, template);
       var ec = ss.namedContext(formId);
@@ -274,6 +278,8 @@ Template.autoForm.events({
       // NOTE: For method forms when ssIsOverride, we will validate again, later, after before hooks
       // but before calling the method, against the collection schema
     }
+
+    formPreserve.unregisterForm(formId);
 
     // Run beginSubmit hooks (disable submit button or form, etc.)
     // NOTE: This needs to stay after getFormValues in case a

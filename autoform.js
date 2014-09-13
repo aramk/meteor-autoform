@@ -104,8 +104,9 @@ Template.autoForm.atts = function autoFormTplAtts() {
   // After removing all of the props we know about, everything else should
   // become a form attribute.
   // XXX Would be better to use a whitelist of HTML attributes allowed on form elements
+  // XXX "settings" is a custom object which can contain additional meta-data for use in hooks, passed down from the parent template.
   return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess",
-      "type", "template", "autosave", "meteormethod", "filter", "autoConvert", "removeEmptyStrings", "trimStrings");
+      "type", "template", "autosave", "meteormethod", "filter", "autoConvert", "removeEmptyStrings", "trimStrings", "settings");
 };
 
 Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) {
@@ -117,6 +118,10 @@ Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) 
   // Retain doc values after a "hot code push", if possible
   var retrievedDoc = formPreserve.getDocument(formId);
   if (retrievedDoc !== false) {
+    if (context.doc) {
+      // Prevent removing the ID when replacing values.
+      retrievedDoc._id = context.doc._id;
+    }
     context.doc = retrievedDoc;
   }
 
