@@ -6,8 +6,13 @@
   "version": "1.0.0",
   "git": "https://github.com/aldeed/meteor-autoform.git",
   "packages": {
-    "simple-schema": {},
-    "collection2": {},
+    "simple-schema": {
+      "git": "https://github.com/aldeed/meteor-simple-schema.git"
+    },
+    "collection2": {
+      "git": "https://github.com/aramk/meteor-collection2.git",
+      "branch": "develop"
+    },
     "moment": {}
   }
 }
