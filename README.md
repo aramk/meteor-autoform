@@ -82,17 +82,17 @@ have to add to your app yourself.
 
 ## Installation
 
-Install using Meteorite. When in a Meteorite-managed app directory, enter:
+In a Meteor app directory, enter:
 
 ```
-$ mrt add autoform
+$ meteor add aldeed:autoform
 ```
 
 ## Example
 
 Let's say you have the following Meteor.Collection instance, with schema support
 provided by the collection2 package. (Adding `autoform` to your app does not add
-`collection2` by default so you need to run `mrt add collection2` for this example
+`collection2` by default so you need to run `meteor add aldeed:collection2` for this example
 to work.)
 
 ```js

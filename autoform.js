@@ -73,6 +73,7 @@ UI.registerHelper('afTemplateName', function afTemplateNameHelper(templateType, 
   if (templateName) {
     result = templateType + '_' + templateName;
     if (!Template[result]) {
+      result = null;
       // TODO should warn only in debug mode
       console.warn(templateType + ': "' + templateName + '" is not a valid template name. Falling back to default template, "' + defaultTemplate + '".');
     }
@@ -118,11 +119,8 @@ Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) 
   // Retain doc values after a "hot code push", if possible
   var retrievedDoc = formPreserve.getDocument(formId);
   if (retrievedDoc !== false) {
-    if (context.doc) {
-      // Prevent removing the ID when replacing values.
-      retrievedDoc._id = context.doc._id;
-    }
-    context.doc = retrievedDoc;
+    // Ensure we keep the _id property which may not be present in retrievedDoc.
+    context.doc = _.extend({}, context.doc || {}, retrievedDoc);
   }
 
   var mDoc;
