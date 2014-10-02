@@ -2,7 +2,7 @@
   "dependencies": [
     [
       "aldeed:simple-schema",
-      "1.0.0"
+      "1.0.1"
     ],
     [
       "blaze",
@@ -22,7 +22,7 @@
     ],
     [
       "deps",
-      "1.0.2"
+      "1.0.3"
     ],
     [
       "ejson",
@@ -34,7 +34,7 @@
     ],
     [
       "htmljs",
-      "1.0.0"
+      "1.0.0-cordova1"
     ],
     [
       "id-map",
@@ -50,15 +50,15 @@
     ],
     [
       "livedata",
-      "1.0.8"
+      "1.0.9"
     ],
     [
       "logging",
-      "1.0.2"
+      "1.0.2-cordova2"
     ],
     [
       "meteor",
-      "1.0.3"
+      "1.0.4-cordova6"
     ],
     [
       "minimongo",
@@ -98,7 +98,7 @@
     ],
     [
       "ui",
-      "1.0.1"
+      "1.0.2"
     ],
     [
       "underscore",
@@ -106,6 +106,6 @@
     ]
   ],
   "pluginDependencies": [],
-  "toolVersion": "meteor-tool@1.0.31",
+  "toolVersion": "meteor-tool@CHECKOUT",
   "format": "1.0"
 }

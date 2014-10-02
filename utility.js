@@ -290,14 +290,10 @@ Utility = {
     // If no schema attribute, use the schema attached to the collection
     var collection = Utility.lookup(context.collection);
     if (collection) {
-      if (collection instanceof Meteor.Collection) {
-        if (typeof collection.simpleSchema === 'function') {
-          return collection.simpleSchema();
-        } else {
-          throw new Error('AutoForm: collection attribute for form with id "' + formId + '" refers to a collection that does not have a schema. You might have forgotten to attach a schema to the collection or you might need to add the collection2 package to your app.');
-        }
+      if (typeof collection.simpleSchema === 'function') {
+        return collection.simpleSchema();
       } else {
-        throw new Error('AutoForm: collection attribute for form with id "' + formId + '" is not a Meteor.Collection instance');
+        throw new Error('AutoForm: collection attribute for form with id "' + formId + '" refers to a collection that does not have a schema, or is not a collection. You might have forgotten to attach a schema to the collection or you might need to add the collection2 package to your app.');
       }
     }
     // If we got this far, we have no schema so throw an error
@@ -418,14 +414,23 @@ Utility = {
   /**
    * @method Utility.dateToNormalizedLocalDateAndTimeString
    * @private
-   * @param {Date} date
-   * @param {String} offset A valid offset string (to pass to moment.zone)
+   * @param {Date} date The Date object
+   * @param {String} [timezoneId] A valid timezoneId that moment-timezone understands, e.g., "America/Los_Angeles"
    * @return {String}
    *
    * Returns a "valid normalized local date and time string".
    */
-  dateToNormalizedLocalDateAndTimeString: function dateToNormalizedLocalDateAndTimeString(date) {
-    return moment(date).format("YYYY-MM-DD[T]HH:mm:ss.SSS");
+  dateToNormalizedLocalDateAndTimeString: function dateToNormalizedLocalDateAndTimeString(date, timezoneId) {
+    var m = moment(date);
+    // by default, we assume local timezone; add moment-timezone to app and pass timezoneId
+    // to use a different timezone
+    if (typeof timezoneId === "string") {
+      if (typeof m.tz !== "function") {
+        throw new Error("If you specify a timezoneId, make sure that you've added a moment-timezone package to your app");
+      }
+      m.tz(timezoneId);
+    }
+    return m.format("YYYY-MM-DD[T]HH:mm:ss.SSS");
   },
   /**
    * @method  Utility.isValidNormalizedLocalDateAndTimeString

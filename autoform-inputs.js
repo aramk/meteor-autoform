@@ -76,7 +76,16 @@ defaultInputValueHandlers = {
 		var val = this.val();
 		val = (typeof val === "string") ? val.replace(/ /g, "T") : val;
 		if (Utility.isValidNormalizedLocalDateAndTimeString(val)) {
-			return moment(val).toDate();
+			var timezoneId = this.attr("data-timezone-id");
+			// default is local, but if there's a timezoneId, we use that
+			if (typeof timezoneId === "string") {
+				if (typeof moment.tz !== "function") {
+	        throw new Error("If you specify a timezoneId, make sure that you've added a moment-timezone package to your app");
+	      }
+	      return moment.tz(val, timezoneId).toDate();
+			} else {
+				return moment(val).toDate();
+			}
 		} else {
 			return null;
 		}

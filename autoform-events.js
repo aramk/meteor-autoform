@@ -122,9 +122,14 @@ Template.autoForm.events({
         if (error) {
           preventQueuedValidation();
           selectFirstInvalidField(formId, ss, template);
-          _.each(onError, function onErrorEach(hook) {
-            hook.call(cbCtx, name, error, template);
-          });
+          if (onError && onError.length) {
+            _.each(onError, function onErrorEach(hook) {
+              hook.call(cbCtx, name, error, template);
+            });
+          } else if (!afterHooks || !afterHooks.length) {
+            // if there are no onError or "after" hooks, throw the error
+            throw error;
+          }
         } else {
           // By default, we reset form after successful submit, but
           // you can opt out.
@@ -342,6 +347,9 @@ Template.autoForm.events({
     // METHOD FORM SUBMIT
     else if (isMethod) {
       // Get "before.methodName" hooks
+      if (!method) {
+        throw new Error('When form type is "method", you must also provide a "meteormethod" attribute');
+      }
       var beforeMethodHooks = Hooks.getHooks(formId, 'before', method);
       // Run "before.methodName" hooks
       doBefore(null, insertDoc, beforeMethodHooks, 'before.method hook', function (doc) {
@@ -396,9 +404,11 @@ Template.autoForm.events({
       return;
 
     // Update cached form values for hot code reload persistence
-    formPreserve.registerForm(formId, function autoFormRegFormCallback() {
-      return getFormValues(template, formId, data.ss).insertDoc;
-    });
+    if (self.preserveForm !== false) {
+      formPreserve.registerForm(formId, function autoFormRegFormCallback() {
+        return getFormValues(template, formId, data.ss).insertDoc;
+      });
+    }
 
     // Update field's value for reactive show/hide of other fields by value
     updateTrackedFieldValue(formId, key, getFieldValue(template, key));

@@ -90,13 +90,13 @@ $ meteor add aldeed:autoform
 
 ## Example
 
-Let's say you have the following Meteor.Collection instance, with schema support
+Let's say you have the following Mongo.Collection instance, with schema support
 provided by the collection2 package. (Adding `autoform` to your app does not add
 `collection2` by default so you need to run `meteor add aldeed:collection2` for this example
 to work.)
 
 ```js
-Books = new Meteor.Collection("books");
+Books = new Mongo.Collection("books");
 Books.attachSchema(new SimpleSchema({
   title: {
     type: String,
@@ -251,8 +251,8 @@ The following attributes are recognized:
 
 * `collection`: Required if `schema` is not set. Set to one of the following:
     * The name of a helper function (no quotation marks) that returns an
-instance of `Meteor.Collection` that has a schema defined.
-    * The name (in quotation marks) of a `Meteor.Collection` instance that has
+instance of `Mongo.Collection` that has a schema defined.
+    * The name (in quotation marks) of a `Mongo.Collection` instance that has
 a schema defined and is in the `window` namespace.
 * `schema`: Required if `collection` is not set. This schema will be used to generate
 and validate the form prior to submission, so you can specify this along with a
@@ -539,7 +539,7 @@ Use this helper with `#if` to dynamically show and hide sections of a form based
 With the collection:
 
 ```js
-FieldValueContains = new Meteor.Collection("FieldValueContains");
+FieldValueContains = new Mongo.Collection("FieldValueContains");
 FieldValueContains.attachSchema(new SimpleSchema({
   a: {
     type: [String],
@@ -913,7 +913,7 @@ modifier as gathered from the form fields. If necessary they can modify the docu
 Therefore, you should not assume that this will always run since a devious user
 could skip it.*
 * The after hooks are the same as those you would normally specify as the last
-argument of the `insert` or `update` methods on a Meteor.Collection or the
+argument of the `insert` or `update` methods on a Mongo.Collection or the
 Meteor.call method. Notice, though, that they are passed one additional final
 argument, which is the template object. One use for the template object
 might be so that you can clean up certain form fields if the result was successful
@@ -966,7 +966,7 @@ to calling `this.event.preventDefault()` and `this.event.stopPropagation()`. If 
 
 If you use `autoValue` or `defaultValue` options, be aware that `insertDoc` and
 `updateDoc` will not yet have auto or default values added to them. If you're
-passing them to `insert` or `update` on a Meteor.Collection with a schema, then
+passing them to `insert` or `update` on a Mongo.Collection with a schema, then
 there's nothing to worry about. But if you're doing something else with the
 object on the client, then you might want to call `clean` to add the auto and
 default values:
@@ -1184,31 +1184,27 @@ in the UTC time zone.
 
 ### type=datetime-local
 
-* **Saving:** If you use an input with `type="datetime-local"`, you should also
-specify an `offset` attribute on the `afFieldInput` or `afFormGroup` helper.
-Set this attribute to a UTC offset string such as "+05:00" or "-0300" or "Z". This
-offset string will be appended to the user-entered date string to create the `Date`
-object that will be saved. For example, if you use an input with `type="datetime-local"` in a form
+* **Saving:** If you use an input with `type="datetime-local"`, the datetime string that is entered will be assumed to be in the client's local timezone. To use a different specific timezone, add a `moment-timezone` package to your app and specify a `timezoneId` attribute on the `afFieldInput` or `afFormGroup` helper.
+Set this attribute to a timezone ID that moment-timezone understands, such as "America/Los_Angeles". For example, if you use an input with `type="datetime-local"` in a form
 in which a user is setting up a meeting, you would need to previously determine
 the time zone in which the meeting will take place. When generating the autoform
-field, set the `offset` attribute to the UTC offset for this time zone.
+field, set the `timezoneId` attribute to the ID for this time zone.
 (Chrome and some mobile browsers provide
 datetime pickers that set the input value to a string in the expected format automatically,
 but users of other browsers will have to manually enter the datetime in the correct
 format, which is `date string + "T" + time string`.)
 * **Loading:** If you are binding an object containing `Date` objects to an update autoform
 and using them in an input with `type="datetime-local"`, be sure to set the
-`offset` attribute on the helper to the time zone offset that applies. This will
+`timezoneId` attribute on the component to the time zone ID that applies. This will
 ensure that the date and time you expect are shown in the input element.
 * **Displaying:** Before displaying the saved date, determine the equivalent
 date and time in the corresponding time zone. The easiest way to do this is
-using `var m = moment(myDate).zone(myDesiredTimeZoneOffset); var displayString = m.format();`
-from the `moment` package/library. (`zone` setting is available starting with
-version 2.1.0 of Moment.)
+using `moment(myDate).tz(timezoneId).format()`
+from the `moment` and `moment-timezone` packages/libraries.
 * **Min/Max:** When specifying min or max values in your schema, use a `Date`
 object that represents the exact minimum or maximum date and time
 in the corresponding time zone. This may mean returning the min or max value
-from a function based on a time zone name or offset you are storing elsewhere.
+from a function based on a time zone ID you are storing elsewhere.
 
 ## Templates
 
@@ -1336,7 +1332,7 @@ your collections at the top level of your client files and without the `var`
 keyword, then you can use this trick to avoid writing helpers.
 
 If you don't use quotation marks, then you must define a helper function with
-that name and have it return the SimpleSchema or Meteor.Collection instance.
+that name and have it return the SimpleSchema or Mongo.Collection instance.
 
 Probably the best technique for organizing your form schemas and making them
 available as helpers is to add all SimpleSchema instances to a `Schemas` object
