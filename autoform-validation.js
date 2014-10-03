@@ -7,7 +7,7 @@ _validateForm = function _validateForm(formId, formDetails, formDocs, useCollect
   // attribute but you want to force validation against the
   // collection's schema instead, pass useCollectionSchema=true
   var ss = (useCollectionSchema && formDetails.collection) ? formDetails.collection.simpleSchema() : formDetails.ss;
-  
+
   // Perform validation
   if (formDetails.submitType === "update") {
     // For a type="update" form, we validate the modifier. We don't want to throw
@@ -92,8 +92,8 @@ _validateField = function _validateField(key, template, skipEmpty, onlyIfAlready
 var vok = {}, tm = {}, _prevent = false;
 validateField = function validateField(key, template, skipEmpty, onlyIfAlreadyInvalid) {
   if (vok[key] === false) {
-    Meteor.clearTimeout(tm[key]);
-    tm[key] = Meteor.setTimeout(function() {
+    Utility.clearTimeout(tm[key]);
+    tm[key] = Utility.setTimeout(function() {
       vok[key] = true;
       if (!_prevent) {
         _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid);
@@ -112,7 +112,7 @@ validateField = function validateField(key, template, skipEmpty, onlyIfAlreadyIn
 // field validation.
 preventQueuedValidation = function preventQueuedValidation() {
   _prevent = true;
-  Meteor.setTimeout(function() {
+  Utility.setTimeout(function() {
     _prevent = false;
   }, 500);
 };

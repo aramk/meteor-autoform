@@ -520,6 +520,24 @@ Utility = {
     } else {
       return s;
     }
+  },
+  /**
+   * Uses Meteor.setTimeout() if on the server, otherwise window.setTimeout() to prevent
+   * https://github.com/aldeed/meteor-autoform/issues/366.
+   * @see window.setTimeout()
+   */
+  setTimeout: function () {
+    var context = Meteor.isServer ? Meteor : window;
+    return context.setTimeout.apply(context, arguments);
+  },
+  /**
+   * Uses Meteor.clearTimeout() if on the server, otherwise window.clearTimeout() to prevent
+   * https://github.com/aldeed/meteor-autoform/issues/366.
+   * @see window.clearTimeout()
+   */
+  clearTimeout: function () {
+    var context = Meteor.isServer ? Meteor : window;
+    return context.clearTimeout.apply(context, arguments);
   }
 };
 

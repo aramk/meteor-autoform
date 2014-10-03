@@ -31,7 +31,7 @@ function endSubmit(formId, template) {
     if (submitButton) {
       submitButton.disabled = false;
     }
-  } 
+  }
 }
 
 Template.autoForm.events({
@@ -199,7 +199,7 @@ Template.autoForm.events({
           ctx.result(result);
         }
       }
-      
+
       runHook(0, doc);
     }
 
@@ -457,7 +457,7 @@ Template.autoForm.events({
       // This must be done after we allow this event handler to return
       // because we have to let the browser reset all fields before we
       // update their values for deps.
-      Meteor.setTimeout(function () {
+      Utility.setTimeout(function () {
         updateAllTrackedFieldValues(formId);
         if (template && !template._notInDOM) {
           template.$("[autofocus]").focus();
