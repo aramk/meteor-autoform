@@ -11,7 +11,7 @@ Template.autoForm.helpers({
     // become a form attribute.
     // XXX Would be better to use a whitelist of HTML attributes allowed on form elements
     return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess",
-        "type", "template", "autosave", "meteormethod", "filter", "autoConvert", "removeEmptyStrings", "trimStrings");
+        "type", "template", "autosave", "meteormethod", "filter", "autoConvert", "removeEmptyStrings", "trimStrings", "settings");
   },
   innerContext: function autoFormTplContext(outerContext) {
     var context = this;
