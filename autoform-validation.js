@@ -1,3 +1,5 @@
+// all form validation logic is here
+
 _validateForm = function _validateForm(formId, formDetails, formDocs, useCollectionSchema) {
   if (formDetails.validationType === 'none')
     return true;
@@ -7,25 +9,28 @@ _validateForm = function _validateForm(formId, formDetails, formDocs, useCollect
   // attribute but you want to force validation against the
   // collection's schema instead, pass useCollectionSchema=true
   var ss = (useCollectionSchema && formDetails.collection) ? formDetails.collection.simpleSchema() : formDetails.ss;
+  
+  var docId = formDetails.doc && formDetails.doc._id || null;
 
   // Perform validation
   if (formDetails.submitType === "update") {
     // For a type="update" form, we validate the modifier. We don't want to throw
     // errors about missing required fields, etc.
-    return validateFormDoc(formDocs.updateDoc, true, formId, ss);
+    return validateFormDoc(formDocs.updateDoc, true, formId, ss, docId);
   } else {
     // For any other type of form, we validate the document.
-    return validateFormDoc(formDocs.insertDoc, false, formId, ss);
+    return validateFormDoc(formDocs.insertDoc, false, formId, ss, docId);
   }
 };
 
-validateFormDoc = function validateFormDoc(doc, isModifier, formId, ss, key) {
+validateFormDoc = function validateFormDoc(doc, isModifier, formId, ss, docId, key) {
   var ec = {
     userId: (Meteor.userId && Meteor.userId()) || null,
     isInsert: !isModifier,
     isUpdate: !!isModifier,
     isUpsert: false,
-    isFromTrustedCode: false
+    isFromTrustedCode: false,
+    docId: docId
   };
 
   // Get a version of the doc that has auto values to validate here. We
@@ -62,6 +67,7 @@ _validateField = function _validateField(key, template, skipEmpty, onlyIfAlready
   var context = template.data;
   var formId = context.id || defaultFormId;
   var formDetails = formData[formId];
+  var docId = formDetails.doc && formDetails.doc._id || null;
   var ss = formDetails.ss;
 
   if (onlyIfAlreadyInvalid && ss.namedContext(formId).isValid()) {
@@ -85,15 +91,15 @@ _validateField = function _validateField(key, template, skipEmpty, onlyIfAlready
   if (skipEmpty && !Utility.objAffectsKey(docToValidate, key))
     return true; //skip validation
 
-  return validateFormDoc(docToValidate, isModifier, formId, ss, key);
+  return validateFormDoc(docToValidate, isModifier, formId, ss, docId, key);
 };
 
 //throttling function that calls out to _validateField
 var vok = {}, tm = {}, _prevent = false;
 validateField = function validateField(key, template, skipEmpty, onlyIfAlreadyInvalid) {
   if (vok[key] === false) {
-    Utility.clearTimeout(tm[key]);
-    tm[key] = Utility.setTimeout(function() {
+    Meteor.clearTimeout(tm[key]);
+    tm[key] = Meteor.setTimeout(function() {
       vok[key] = true;
       if (!_prevent) {
         _validateField(key, template, skipEmpty, onlyIfAlreadyInvalid);
@@ -112,7 +118,7 @@ validateField = function validateField(key, template, skipEmpty, onlyIfAlreadyIn
 // field validation.
 preventQueuedValidation = function preventQueuedValidation() {
   _prevent = true;
-  Utility.setTimeout(function() {
+  Meteor.setTimeout(function() {
     _prevent = false;
   }, 500);
 };

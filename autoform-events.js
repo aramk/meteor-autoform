@@ -1,3 +1,6 @@
+// all form events handled here
+var lastAutoSaveElement = null;
+
 function beginSubmit(formId, template) {
   if (!template || template._notInDOM)
     return;
@@ -19,6 +22,8 @@ function beginSubmit(formId, template) {
 function endSubmit(formId, template) {
   if (!template || template._notInDOM)
     return;
+  // Try to avoid incorrect reporting of which input caused autosave
+  lastAutoSaveElement = null;
   // Get user-defined hooks
   var hooks = Hooks.getHooks(formId, 'endSubmit');
   if (hooks.length) {
@@ -113,6 +118,8 @@ Template.autoForm.events({
         event: event,
         template: template,
         formId: formId,
+        docId: docId,
+        autoSaveChangedElement: lastAutoSaveElement,
         resetForm: function () {
           AutoForm.resetForm(formId, template);
         }
@@ -126,8 +133,10 @@ Template.autoForm.events({
             _.each(onError, function onErrorEach(hook) {
               hook.call(cbCtx, name, error, template);
             });
-          } else if (!afterHooks || !afterHooks.length) {
-            // if there are no onError or "after" hooks, throw the error
+          } else if ((!afterHooks || !afterHooks.length) && ss.namedContext(formId).isValid()) {
+            // if there are no onError or "after" hooks or validation errors, throw the error
+            // because it must be some other error from the server
+            endSubmit(formId, template);
             throw error;
           }
         } else {
@@ -181,6 +190,8 @@ Template.autoForm.events({
           event: event,
           template: template,
           formId: formId,
+          docId: docId,
+          autoSaveChangedElement: lastAutoSaveElement,
           resetForm: function () {
             AutoForm.resetForm(formId, template);
           },
@@ -226,6 +237,8 @@ Template.autoForm.events({
         event: event,
         template: template,
         formId: formId,
+        docId: docId,
+        autoSaveChangedElement: lastAutoSaveElement,
         resetForm: function () {
           AutoForm.resetForm(formId, template);
         },
@@ -416,6 +429,7 @@ Template.autoForm.events({
     // If the form should be auto-saved whenever updated, we do that on field
     // changes instead of validating the field
     if (data.autosave) {
+      lastAutoSaveElement = event.currentTarget;
       $(event.currentTarget).submit();
       return;
     }

@@ -1,3 +1,5 @@
+// This file defines the public, exported API
+
 AutoForm = AutoForm || {}; //exported
 
 AutoForm.formPreserve = formPreserve;
@@ -253,14 +255,14 @@ AutoForm.getValidationContext = function autoFormGetValidationContext(formId) {
  * @public
  * @return {Object} The data context for the closest autoform.
  *
- * Call this method from a UI helper to get the data context for the closest autoform.
+ * Call this method from a UI helper to get the data context for the closest autoform. Always returns the context or throws an error.
  */
 AutoForm.find = function autoFormFind(type) {
   var n = 0, af;
   do {
     af = UI._parentData(n++);
   } while (af && !af._af);
-  if (!af) {
+  if (!af || !af._af) {
     throw new Error((type || "AutoForm.find") + " must be used within an autoForm block");
   }
   return af._af;
@@ -274,6 +276,7 @@ AutoForm.find = function autoFormFind(type) {
  */
 AutoForm.debug = function autoFormDebug() {
   SimpleSchema.debug = true;
+  AutoForm._debug = true;
   AutoForm.addHooks(null, {
     onError: function (operation, error, template) {
       console.log("Error in " + this.formId, operation, error);
@@ -284,7 +287,51 @@ AutoForm.debug = function autoFormDebug() {
 /**
  * @property AutoForm.arrayTracker
  * @public
+ * @param {Object} atts
+ * @param {Object} defs
+ * @param {Boolean} expectsArray
  *
  * @return {ArrayTracker}
  */
 AutoForm.arrayTracker = arrayTracker;
+
+/**
+ * @method AutoForm.getInputType
+ * @param {Object} atts The attributes provided to afFieldInput.
+ * @public
+ * @return {String} The input type. Most are the same as the `type` attributes for HTML input elements, but some are special strings that autoform interprets.
+ *
+ * Call this method from a UI helper to get the type string for the input control.
+ */
+AutoForm.getInputType = getInputType;
+
+/**
+ * @method AutoForm.getSchemaForField
+ * @public
+ * @param {String} name The field name attribute / schema key.
+ * @param {Object} [autoform] The autoform context. Optionally pass this if you've already retrieved it using AutoForm.find as a performance enhancement.
+ * @return {Object} 
+ *
+ * Call this method from a UI helper to get the field definitions based on the schema used by the closest containing autoForm.
+ * Always throws an error or returns the schema object.
+ */
+AutoForm.getSchemaForField = function autoFormGetSchemaForField(name, autoform) {
+  var ss;
+  if (autoform) {
+    ss = autoform.ss;
+  }
+  if (!ss) {
+    ss = AutoForm.find().ss;
+  }
+  return Utility.getDefs(ss, name);
+};
+
+/**
+ * @method AutoForm.expectsArray
+ * @public
+ * @param {Object} atts The attributes provided to afFieldInput.
+ * @return {Boolean} 
+ *
+ * Call this method from a UI helper to determine whether the user is expecting the input control to produce an array value.
+ */
+AutoForm.expectsArray = expectsArray;

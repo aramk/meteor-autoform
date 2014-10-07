@@ -227,8 +227,8 @@ Here's an example:
         {{> afFieldInput name='cost'}}
         <span class="input-group-addon">/each</span>
       </div>
-      {{#if afFieldIsInvalid 'cost'}}
-      <span class="help-block">{{afFieldMessage 'cost'}}</span>
+      {{#if afFieldIsInvalid name='cost'}}
+      <span class="help-block">{{afFieldMessage name='cost'}}</span>
       {{/if}}
     </div>
   </fieldset>
@@ -377,7 +377,7 @@ Here's an example of passing `options` to generate a `select` field:
 *client.js:*
 
 ```js
-UI.registerHelper("yearOptions", function() {
+Template.registerHelper("yearOptions", function() {
     return [
         {label: "2013", value: 2013},
         {label: "2014", value: 2014},
@@ -834,6 +834,7 @@ AutoForm.hooks({
       update: function(error, result, template) {},
       "methodName": function(error, result, template) {}
     },
+    // Called when form does not have a `type` attribute
     onSubmit: function(insertDoc, updateDoc, currentDoc) {},
 
     // Called when any operation succeeds, where operation will be
@@ -881,8 +882,8 @@ If you want to add the same hook for multiple forms or for all forms, use the
   });
 
   AutoForm.addHooks(null, {
-    onSubmit: function () {
-      console.log("onSubmit ALL FORMS!");
+    onSuccess: function () {
+      console.log("onSuccess on all input/update/method forms!");
     }
   });
 ```
@@ -1368,7 +1369,7 @@ Schemas.ContactForm = new SimpleSchema({
 *client.js:*
 
 ```js
-UI.registerHelper("Schemas", Schemas);
+Template.registerHelper("Schemas", Schemas);
 ```
 
 *html:*

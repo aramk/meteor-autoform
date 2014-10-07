@@ -4,7 +4,7 @@ formData = {}; //for looking up autoform data by form ID
 templatesById = {}; //keep a reference of autoForm templates by form `id` for AutoForm.getFormValues
 formValues = {}; //for reactive show/hide based on current value of a field
 formDeps = {}; //for invalidating the form inner context and causing rerender
-var fd = new FormData();
+fd = new FormData();
 arrayTracker = new ArrayTracker();
 customInputValueHandlers = {};
 defaultTemplate = "bootstrap3";
@@ -44,368 +44,6 @@ deps = {
     afObjectField: new Deps.Dependency,
     afArrayField: new Deps.Dependency
   }
-};
-
-/*
- * Shared
- */
-
-UI.registerHelper('afTemplateName', function afTemplateNameHelper(templateType, templateName) {
-  var self = this;
-
-  // Template may be specified in schema.
-  // Skip for quickForm because it renders a form and not a field.
-  if (!templateName && templateType !== 'quickForm') {
-    var autoform = AutoForm.find(templateType);
-    var fieldName = self.name;
-
-    if (fieldName && autoform) {
-      var defs = Utility.getDefs(autoform.ss, fieldName); //defs will not be undefined
-      templateName = (defs.autoform && defs.autoform.template);
-    }
-  }
-
-  // Determine default template
-  var defaultTemplate = AutoForm.getDefaultTemplateForType(templateType) || AutoForm.getDefaultTemplate();
-
-  // Determine template name
-  var result;
-  if (templateName) {
-    result = templateType + '_' + templateName;
-    if (!Template[result]) {
-      result = null;
-      // TODO should warn only in debug mode
-      console.warn(templateType + ': "' + templateName + '" is not a valid template name. Falling back to default template, "' + defaultTemplate + '".');
-    }
-  }
-
-  if (!result) {
-    result = templateType + '_' + defaultTemplate;
-    if (!Template[result]) {
-      throw new Error(templateType + ': "' + defaultTemplate + '" is not a valid template name');
-    }
-  }
-
-  // Return the template name that we want to use
-  return result;
-});
-
-/*
- * autoForm
- */
-
-Template.autoForm.atts = function autoFormTplAtts() {
-  var context = _.clone(this);
-
-  // By default, we add the `novalidate="novalidate"` attribute to our form,
-  // unless the user passes `validation="browser"`.
-  if (context.validation !== "browser" && !context.novalidate) {
-    context.novalidate = "novalidate";
-  }
-  // After removing all of the props we know about, everything else should
-  // become a form attribute.
-  // XXX Would be better to use a whitelist of HTML attributes allowed on form elements
-  return _.omit(context, "schema", "collection", "validation", "doc", "resetOnSuccess",
-      "type", "template", "autosave", "meteormethod", "filter", "autoConvert", "removeEmptyStrings", "trimStrings", "settings");
-};
-
-Template.autoForm.innerContext = function autoFormTplInnerContext(outerContext) {
-  var context = this;
-  var formId = context.id || defaultFormId;
-  var collection = Utility.lookup(context.collection);
-  var ss = Utility.getSimpleSchemaFromContext(context, formId);
-
-  // Retain doc values after a "hot code push", if possible
-  var retrievedDoc = formPreserve.getDocument(formId);
-  if (retrievedDoc !== false) {
-    // Ensure we keep the _id property which may not be present in retrievedDoc.
-    context.doc = _.extend({}, context.doc || {}, retrievedDoc);
-  }
-
-  var mDoc;
-  if (context.doc && !_.isEmpty(context.doc)) {
-    // Clone doc
-    var copy = _.clone(context.doc);
-    var hookCtx = {formId: formId};
-    // Pass doc through docToForm hooks
-    _.each(Hooks.getHooks(formId, 'docToForm'), function autoFormEachDocToForm(hook) {
-      copy = hook.call(hookCtx, copy, ss, formId);
-    });
-    // Create a "flat doc" that can be used to easily get values for corresponding
-    // form fields.
-    mDoc = new MongoObject(copy);
-    fd.sourceDoc(formId, mDoc);
-  } else {
-    fd.sourceDoc(formId, null);
-  }
-
-  // Check autosave
-  var autosave, resetOnSuccess;
-  if (context.autosave === true && context.type === "update") {
-    // Autosave and never reset on success
-    autosave = true;
-    resetOnSuccess = false;
-  } else {
-    autosave = false;
-    resetOnSuccess = context.resetOnSuccess;
-  }
-
-  // Set up the context to be used for everything within the autoform.
-  var innerContext = {_af: {
-    formId: formId,
-    collection: collection,
-    ss: ss,
-    ssIsOverride: !!collection && !!context.schema,
-    doc: context.doc || null,
-    mDoc: mDoc,
-    validationType: (context.validation == null ? "submitThenKeyup" : context.validation),
-    submitType: context.type,
-    submitMethod: context.meteormethod,
-    resetOnSuccess: resetOnSuccess,
-    autosave: autosave,
-    filter: context.filter,
-    autoConvert: context.autoConvert,
-    removeEmptyStrings: context.removeEmptyStrings,
-    trimStrings: context.trimStrings
-  }};
-
-  // Cache context for lookup by formId
-  formData[formId] = innerContext._af;
-
-  // When we change the form, loading a different doc, reloading the current doc, etc.,
-  // we also want to reset the array counts for the form
-  arrayTracker.resetForm(formId);
-
-  // Preserve outer context, allowing access within autoForm block without needing ..
-  _.extend(innerContext, outerContext);
-  return innerContext;
-};
-
-Template.autoForm.created = function autoFormCreated() {
-  var self = this;
-  var formId = self.data.id || defaultFormId;
-  // Add to templatesById list
-  templatesById[formId] = self;
-};
-
-Template.autoForm.destroyed = function autoFormDestroyed() {
-  var self = this;
-  self._notInDOM = true;
-  var formId = self.data.id || defaultFormId;
-
-  // Remove from templatesById list
-  if (templatesById[formId]) {
-    delete templatesById[formId];
-  }
-
-  // Remove from data list
-  if (formData[formId]) {
-    delete formData[formId];
-  }
-
-  // Remove from array fields list
-  arrayTracker.untrackForm(formId);
-
-  // Remove from field values
-  if (formValues[formId]) {
-    delete formValues[formId];
-  }
-
-  // Unregister form preservation
-  formPreserve.unregisterForm(formId);
-};
-
-/*
- * quickForm
- */
-
-Template.quickForm.innerContext = function quickFormContext(atts) {
-  // Pass along quickForm context to autoForm context, minus a few
-  // properties that are specific to quickForms.
-  var qfAutoFormContext = _.omit(atts, "buttonContent", "buttonClasses", "fields", "omitFields");
-
-  return {
-    qfAutoFormContext: qfAutoFormContext,
-    atts: atts,
-    // qfShouldRenderButton helper
-    qfShouldRenderButton: function qfShouldRenderButton() {
-      var self = this;
-      var qfAtts = self.atts;
-      var submitType = self._af.submitType;
-      return (qfAtts.buttonContent !== false && submitType !== "readonly" && submitType !== "disabled");
-    }
-  };
-};
-
-/*
- * afFieldInput
- */
-
-Template.afFieldInput.getTemplateType = function getTemplateType() {
-  return getInputTemplateType(this.type);
-};
-
-Template.afFieldSelect.innerContext =
-Template.afFieldInput.innerContext = function afFieldInputInnerContext(options) {
-  var c = Utility.normalizeContext(options.hash, "afFieldInput and afFieldSelect");
-  var contentBlock = options.hash.contentBlock; // applies only to afFieldSelect
-  var contentBlockContext = options.hash.contentBlockContext; // applies only to afFieldSelect
-
-  // Set up deps, allowing us to re-render the form
-  formDeps[c.af.formId] = formDeps[c.af.formId] || new Deps.Dependency;
-  formDeps[c.af.formId].depend();
-
-  var ss = c.af.ss;
-  var defs = c.defs;
-
-  // Adjust for array fields if necessary
-  var expectsArray = false;
-  var defaultValue = defs.defaultValue; //make sure to use pre-adjustment defaultValue for arrays
-  if (defs.type === Array) {
-    defs = ss.schema(c.atts.name + ".$");
-
-    //if the user overrides the type to anything,
-    //then we won't be using a select box and
-    //we won't be expecting an array for the current value
-    expectsArray = !c.atts.type;
-  }
-
-  // Get inputType
-  var inputType = getInputType(c.atts, defs, expectsArray);
-
-  // Get input value
-  var value = getInputValue(c.atts.name, c.atts, expectsArray, inputType, c.atts.value, c.af.mDoc, defaultValue);
-
-  // Track field's value for reactive show/hide of other fields by value
-  updateTrackedFieldValue(c.af.formId, c.atts.name, value);
-
-  // Get input data context
-  var iData = getInputData(defs, c.atts, value, inputType, ss.label(c.atts.name), expectsArray, c.af.submitType, c.af);
-
-  // Return input data context
-  return _.extend({_af: c.af, contentBlock: contentBlock, contentBlockContext: contentBlockContext, type: inputType}, iData);
-};
-
-/*
- * afArrayField
- */
-
-Template.afArrayField.innerContext = function (options) {
-  var c = Utility.normalizeContext(options.hash, "afArrayField");
-  var name = c.atts.name;
-  var fieldMinCount = c.atts.minCount || 0;
-  var fieldMaxCount = c.atts.maxCount || Infinity;
-  var ss = c.af.ss;
-  var formId = c.af.formId;
-
-  // Init the array tracking for this field
-  var docCount = fd.getDocCountForField(formId, name);
-  if (docCount == null) {
-    docCount = c.atts.initialCount;
-  }
-  arrayTracker.initField(formId, name, ss, docCount, fieldMinCount, fieldMaxCount);
-
-  return {
-    atts: c.atts
-  };
-};
-
-/*
- * afFormGroup
- */
-
-function formGroupLabelAtts(context) {
-  // Remove unwanted props from the hash
-  context = _.omit(context, 'label');
-
-  // Separate label options from input options; label items begin with "label-"
-  var labelContext = {
-    name: context.name,
-    template: context.template
-  };
-  _.each(context, function autoFormLabelContextEach(val, key) {
-    if (key.indexOf("label-") === 0) {
-      labelContext[key.substring(6)] = val;
-    }
-  });
-
-  return labelContext;
-}
-
-function formGroupInputAtts(context) {
-  // Remove unwanted props from the hash
-  context = _.omit(context, 'label');
-
-  // Separate label options from input options; label items begin with "label-"
-  var inputContext = {};
-  _.each(context, function autoFormInputContextEach(val, key) {
-    if (key.indexOf("label-") !== 0) {
-      inputContext[key] = val;
-    }
-  });
-
-  return inputContext;
-}
-
-Template.afFormGroup.innerContext = function afFormGroupInnerContext(options) {
-  var c = Utility.normalizeContext(options.hash, "afFormGroup");
-  var ss = c.af.ss;
-
-  var labelAtts = formGroupLabelAtts(c.atts);
-  var inputAtts = formGroupInputAtts(c.atts);
-
-  return {
-    skipLabel: (c.atts.label === false || (c.defs.type === Boolean && !("select" in c.atts) && !("radio" in c.atts))),
-    afFieldLabelAtts: labelAtts,
-    afFieldInputAtts: inputAtts,
-    atts: {name: inputAtts.name}
-  };
-};
-
-/*
- * afQuickField
- */
-
-Template.afQuickField.isGroup = function afQuickFieldIsGroup(options) {
-  var c = Utility.normalizeContext(options.hash, "afQuickField");
-  // Render an array of fields if we expect an Object and we don't have options
-  // and we have not overridden the type
-  return (c.defs.type === Object && !c.atts.options && !c.atts.type);
-};
-
-Template.afQuickField.isFieldArray = function afQuickFieldIsFieldArray(options) {
-  var c = Utility.normalizeContext(options.hash, "afQuickField");
-  // Render an array of fields if we expect an Array and we don't have options
-  // and we have not overridden the type
-  return (c.defs.type === Array && !c.atts.options && !c.atts.type);
-};
-
-/*
- * afQuickFields
- */
-
-Template.afQuickFields.helpers({
-  quickFieldAtts: function quickFieldAtts() {
-    return _.extend({options: "auto"}, UI._parentData(2), this);
-  }
-});
-
-/*
- * afEachArrayItem
- */
-
-Template.afEachArrayItem.innerContext = function afEachArrayItemInnerContext(options) {
-  var c = Utility.normalizeContext(options.hash, "afEachArrayItem");
-  var formId = c.af.formId;
-  var name = c.atts.name;
-
-  var docCount = fd.getDocCountForField(formId, name);
-  if (docCount == null) {
-    docCount = c.atts.initialCount;
-  }
-  arrayTracker.initField(formId, name, c.af.ss, docCount, c.atts.minCount, c.atts.maxCount);
-
-  return arrayTracker.getField(formId, name);
 };
 
 /*
@@ -538,7 +176,7 @@ getFormValues = function getFormValues(template, formId, ss) {
  * * The value that is set in the `doc` provided on the containing autoForm
  * * The `defaultValue` from the schema
  */
-function getInputValue(name, atts, expectsArray, inputType, value, mDoc, defaultValue) {
+getInputValue = function getInputValue(name, atts, expectsArray, inputType, value, mDoc, defaultValue) {
   if (typeof value === "undefined") {
     // Get the value for this key in the current document
     if (mDoc) {
@@ -605,9 +243,9 @@ function getInputValue(name, atts, expectsArray, inputType, value, mDoc, default
 
   // We return either a string, a boolean, or an array of strings
   return value;
-}
+};
 
-function getInputData(defs, hash, value, inputType, label, expectsArray, submitType, _af) {
+getInputData = function getInputData(defs, hash, value, inputType, label, expectsArray, submitType, _af) {
   var schemaType = defs.type;
 
   // We don't want to alter the original hash, so we clone it and
@@ -792,7 +430,7 @@ function getInputData(defs, hash, value, inputType, label, expectsArray, submitT
         }
       ];
     }
-
+    
     if (inputType === "boolean-radios" || inputType === "boolean-select") {
       data.items = getItems();
     } else {
@@ -862,47 +500,9 @@ function getInputData(defs, hash, value, inputType, label, expectsArray, submitT
   data.atts = inputAtts;
 
   return data;
-}
+};
 
-function getInputType(atts, defs, expectsArray) {
-  var schemaType = defs.type;
-
-  var type = "text";
-  if (atts.type) {
-    type = atts.type;
-  } else if (atts.options) {
-    if (atts.noselect) {
-      if (expectsArray) {
-        type = "select-checkbox";
-      } else {
-        type = "select-radio";
-      }
-    } else {
-      type = "select";
-    }
-  } else if (schemaType === String && defs.regEx === SimpleSchema.RegEx.Email) {
-    type = "email";
-  } else if (schemaType === String && defs.regEx === SimpleSchema.RegEx.Url) {
-    type = "url";
-  } else if (schemaType === String && atts.rows) {
-    type = "textarea";
-  } else if (schemaType === Number) {
-    type = "number";
-  } else if (schemaType === Date) {
-    type = "date";
-  } else if (schemaType === Boolean) {
-    if (atts.radio) {
-      type = "boolean-radios";
-    } else if (atts.select) {
-      type = "boolean-select";
-    } else {
-      type = "boolean-checkbox";
-    }
-  }
-  return type;
-}
-
-function getInputTemplateType(type) {
+getInputTemplateType = function getInputTemplateType(type) {
   // Special types
   var typeMap = {
     "select": "afSelect",
@@ -917,9 +517,9 @@ function getInputTemplateType(type) {
 
   // All other input types
   var defaultTemplateType = "afInput";
-
+  
   return typeMap[type] || defaultTemplateType;
-}
+};
 
 updateTrackedFieldValue = function updateTrackedFieldValue(formId, key, val) {
   formValues[formId] = formValues[formId] || {};
